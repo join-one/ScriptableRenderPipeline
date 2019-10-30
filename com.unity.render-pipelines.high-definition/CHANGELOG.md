@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Added non temporal version of SSAO.
 - Added more detailed ray tracing stats in the debug window
 - Added Disc area light (bake only)
+- Added a warning in the material UI to prevent transparent + subsurface-scattering combination.
 
 ### Fixed
 - Sorting, undo, labels, layout in the Lighting Explorer.
@@ -114,7 +115,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Fixed black ambient sky issue when importing a project after deleting Library.
 - Fixed issue when upgrading a Standard transparent material (case 1186874)
 - Fixed area light cookies not working properly with stack lit
-- Allowing ray tracing in the editor when the deployment target is StandaloneWindows
+- Fixed material render queue not updated when the shader is changed in the material inspector.
 
 ### Changed
 - Color buffer pyramid is not allocated anymore if neither refraction nor distortion are enabled
@@ -135,6 +136,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Simplified Light's type API regrouping the logic in one place (Check type in HDAdditionalLightData)
 - The support of LOD CrossFade (Dithering transition) in master nodes now required to enable it in the master node settings (Save variant)
 - Improved shadow bias, by removing constant depth bias and substituting it with slope-scale bias. 
+- Fix the default stencil values when a material is created from a SSS ShaderGraph.
 
 ## [7.1.1] - 2019-09-05
 
