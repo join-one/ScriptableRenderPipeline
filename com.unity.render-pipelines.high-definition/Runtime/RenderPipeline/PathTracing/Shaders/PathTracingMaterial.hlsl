@@ -1,163 +1,12 @@
-// FIXME: these sample/evaluate functions will be refactored when introducing transmission (BRDF/BTDF)
+#define MAX_BSDF_COUNT 3
 
-struct Material
+struct MaterialData
 {
     BSDFData bsdfData;
+    float    bsdfWeight[MAX_BSDF_COUNT];
+    uint     bsdfCount;
     float3   V;
-    float    diffProb;
-    float    specProb;
 };
-
-bool IsSampleValid(float3 geoNormal, float3 sampleDir)
-{
-    return dot(geoNormal, sampleDir) > 0.0;
-}
-
-bool SampleGGX(Material mtl,
-               float3 inputSample,
-           out float3 outgoingDir,
-           out float3 value,
-           out float pdf)
-{
-    float NdotL, NdotH, VdotH;
-    float3x3 localToWorld = GetLocalFrame(mtl.bsdfData.normalWS); // FIXME: (bi)tangent unreliable here
-    SampleGGXDir(inputSample, mtl.V, localToWorld, mtl.bsdfData.roughnessT, outgoingDir, NdotL, NdotH, VdotH);
-
-    if (NdotL < 0.001 || !IsSampleValid(mtl.bsdfData.geomNormalWS, outgoingDir))
-        return false;
-
-    float D = D_GGX(NdotH, mtl.bsdfData.roughnessT);
-    pdf = D * NdotH / (4.0 * VdotH);
-
-    if (pdf < 0.001)
-        return false;
-
-    float NdotV = dot(mtl.bsdfData.normalWS, mtl.V);
-    float3 F = F_Schlick(mtl.bsdfData.fresnel0, NdotV);
-    float V = V_SmithJointGGX(NdotL, NdotV, mtl.bsdfData.roughnessT);
-
-    value = F * D * V * NdotL;
-
-    return true;
-}
-
-void EvaluateGGX(Material mtl,
-                 float3 outgoingDir,
-             out float3 value,
-             out float pdf)
-{
-    float NdotV = dot(mtl.bsdfData.normalWS, mtl.V);
-    if (NdotV < 0.001)
-    {
-        value = 0.0;
-        pdf = 0.0;
-        return;
-    }
-    float NdotL = dot(mtl.bsdfData.normalWS, outgoingDir);
-
-    float3 H = normalize(mtl.V + outgoingDir);
-    float NdotH = dot(mtl.bsdfData.normalWS, H);
-    float VdotH = dot(mtl.V, H);
-    float D = D_GGX(NdotH, mtl.bsdfData.roughnessT);
-    pdf = D * NdotH / (4.0 * VdotH);
-
-    float3 F = F_Schlick(mtl.bsdfData.fresnel0, NdotV);
-    float V = V_SmithJointGGX(NdotL, NdotV, mtl.bsdfData.roughnessT);
-
-    value = F * D * V * NdotL;
-}
-
-bool SampleLambert(Material mtl,
-                   float3 inputSample,
-               out float3 outgoingDir,
-               out float3 value,
-               out float pdf)
-{
-    outgoingDir = SampleHemisphereCosine(inputSample.x, inputSample.y, mtl.bsdfData.normalWS);
-
-    if (!IsSampleValid(mtl.bsdfData.geomNormalWS, outgoingDir))
-        return false;
-
-    pdf = dot(mtl.bsdfData.normalWS, outgoingDir) * INV_PI;
-
-    if (pdf < 0.001)
-        return false;
-
-    value = mtl.bsdfData.diffuseColor * pdf;
-
-    return true;
-}
-
-void EvaluateLambert(Material mtl,
-                     float3 outgoingDir,
-                 out float3 value,
-                 out float pdf)
-{
-    pdf = dot(mtl.bsdfData.normalWS, outgoingDir) * INV_PI;
-    value = mtl.bsdfData.diffuseColor * pdf;
-}
-
-bool SampleBurley(Material mtl,
-                  float3 inputSample,
-              out float3 outgoingDir,
-              out float3 value,
-              out float pdf)
-{
-    outgoingDir = SampleHemisphereCosine(inputSample.x, inputSample.y, mtl.bsdfData.normalWS);
-
-    if (!IsSampleValid(mtl.bsdfData.geomNormalWS, outgoingDir))
-        return false;
-
-    float NdotL = dot(mtl.bsdfData.normalWS, outgoingDir);
-    pdf = NdotL * INV_PI;
-
-    if (pdf < 0.001)
-        return false;
-
-    float NdotV = saturate(dot(mtl.bsdfData.normalWS, mtl.V));
-    float LdotV = saturate(dot(outgoingDir, mtl.V));
-    value = mtl.bsdfData.diffuseColor * DisneyDiffuseNoPI(NdotV, NdotL, LdotV, mtl.bsdfData.perceptualRoughness) * pdf;
-
-    return true;
-}
-
-void EvaluateBurley(Material mtl,
-                    float3 outgoingDir,
-                out float3 value,
-                out float pdf)
-{
-    float NdotL = dot(mtl.bsdfData.normalWS, outgoingDir);
-    float NdotV = saturate(dot(mtl.bsdfData.normalWS, mtl.V));
-    float LdotV = saturate(dot(outgoingDir, mtl.V));
-
-    pdf = NdotL * INV_PI;
-    value = mtl.bsdfData.diffuseColor * DisneyDiffuseNoPI(NdotV, NdotL, LdotV, mtl.bsdfData.perceptualRoughness) * pdf;
-}
-
-bool SampleDiffuse(Material mtl,
-                   float3 inputSample,
-               out float3 outgoingDir,
-               out float3 value,
-               out float pdf)
-{
-#ifdef USE_DIFFUSE_LAMBERT_BRDF
-    return SampleLambert(mtl, inputSample, outgoingDir, value, pdf);
-#else
-    return SampleBurley(mtl, inputSample, outgoingDir, value, pdf);
-#endif
-}
-
-void EvaluateDiffuse(Material mtl,
-                     float3 outgoingDir,
-                 out float3 value,
-                 out float pdf)
-{
-#ifdef USE_DIFFUSE_LAMBERT_BRDF
-    EvaluateLambert(mtl, outgoingDir, value, pdf);
-#else
-    EvaluateBurley(mtl, outgoingDir, value, pdf);
-#endif
-}
 
 struct MaterialResult
 {
@@ -167,7 +16,67 @@ struct MaterialResult
     float  specPdf;
 };
 
-bool IsBlack(Material mtl)
+void Init(inout MaterialResult result)
 {
-    return mtl.diffProb + mtl.specProb < 0.001;
+    result.diffValue = 0.0;
+    result.diffPdf = 0.0;
+    result.specValue = 0.0;
+    result.specPdf = 0.0;
+}
+
+void InitDiffuse(inout MaterialResult result)
+{
+    result.diffValue = 0.0;
+    result.diffPdf = 0.0;
+}
+
+void InitSpecular(inout MaterialResult result)
+{
+    result.specValue = 0.0;
+    result.specPdf = 0.0;
+}
+
+bool IsBlack(MaterialData mtlData)
+{
+    float wSum = 0.0;
+    for (uint i = 0; i < mtlData.bsdfCount; i++)
+        wSum += mtlData.bsdfWeight[i];
+    return wSum < 0.001;
+}
+
+bool IsAbove(float3 normalWS, float3 dirWS)
+{
+    return dot(normalWS, dirWS) >= 0.0;
+}
+
+bool IsAbove(MaterialData mtlData, float3 dirWS)
+{
+    return IsAbove(mtlData.bsdfData.geomNormalWS, dirWS);
+}
+
+bool IsAbove(MaterialData mtlData)
+{
+    return IsAbove(mtlData.bsdfData.geomNormalWS, mtlData.V);
+}
+
+bool IsBelow(float3 normalWS, float3 dirWS)
+{
+    return !IsAbove(normalWS, dirWS);
+}
+
+bool IsBelow(MaterialData mtlData, float3 dirWS)
+{
+    return !IsAbove(mtlData, dirWS);
+}
+
+bool IsBelow(MaterialData mtlData)
+{
+    return !IsAbove(mtlData);
+}
+
+float3x3 GetTangentFrame(MaterialData mtlData)
+{
+    return mtlData.bsdfData.anisotropy != 0.0 ?
+        float3x3(mtlData.bsdfData.tangentWS, mtlData.bsdfData.bitangentWS, mtlData.bsdfData.normalWS) :
+        GetLocalFrame(mtlData.bsdfData.normalWS);
 }

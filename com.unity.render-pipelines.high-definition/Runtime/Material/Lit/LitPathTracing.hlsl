@@ -1,55 +1,107 @@
-Material CreateMaterial(BSDFData bsdfData, float3 V)
+#include "Packages/com.unity.render-pipelines.high-definition/Runtime/RenderPipeline/PathTracing/Shaders/PathTracingMaterial.hlsl"
+#include "Packages/com.unity.render-pipelines.high-definition/Runtime/RenderPipeline/PathTracing/Shaders/PathTracingBSDF.hlsl"
+
+// Lit Material Data:
+//
+// bsdfCount    3
+// bsdfWeight0  Diffuse BRDF
+// bsdfWeight1  GGX BRDF
+// bsdfWeight2  GGX BTDF
+
+MaterialData CreateMaterialData(BSDFData bsdfData, float3 V)
 {
-    Material mtl;
+    MaterialData mtlData;
+    mtlData.bsdfCount = 3;
 
-    float  NdotV = dot(bsdfData.normalWS, V);
-    float3 F = F_Schlick(bsdfData.fresnel0, NdotV);
+    // First determine if our incoming direction V is above (exterior) or below (interior) the surface
+    if (IsAbove(bsdfData.geomNormalWS, V))
+    {
+        float  NdotV = dot(bsdfData.normalWS, V);
+        float3 F = F_Schlick(bsdfData.fresnel0, NdotV);
 
-    // If N.V < 0 (can happen with normal mapping) we want to avoid spec sampling
-    mtl.specProb = NdotV > 0.001 ? Luminance(F) : 0.0;
-    mtl.diffProb = Luminance(bsdfData.diffuseColor);
+        // If N.V < 0 (can happen with normal mapping) we want to avoid spec sampling
+        bool consistentNormal = (NdotV > 0.001);
+        mtlData.bsdfWeight[0] = Luminance(bsdfData.diffuseColor);
+        mtlData.bsdfWeight[1] = consistentNormal ? lerp(Luminance(F), 0.5, bsdfData.roughnessT) : 0.0;
+        mtlData.bsdfWeight[2] = consistentNormal ? (1.0 - mtlData.bsdfWeight[1]) * bsdfData.transmittanceMask : 0.0;
+    }
+    else // Below
+    {
+        mtlData.bsdfWeight[0] = 0.0;
+        mtlData.bsdfWeight[1] = 0.0;
+        mtlData.bsdfWeight[2] = 1.0;
+    }
 
     // If we are basically black, no need to compute anything else for this material
-    if (!IsBlack(mtl))
+    if (!IsBlack(mtlData))
     {
-        mtl.specProb /= mtl.diffProb + mtl.specProb;
-        mtl.diffProb = 1.0 - mtl.specProb;
+        float denom = mtlData.bsdfWeight[0] + mtlData.bsdfWeight[1] + mtlData.bsdfWeight[2];
+        mtlData.bsdfWeight[0] /= denom;
+        mtlData.bsdfWeight[1] /= denom;
+        mtlData.bsdfWeight[2] /= denom;
 
         // Keep these around, rather than passing them to all methods
-        mtl.bsdfData = bsdfData;
-        mtl.V = V;
+        mtlData.bsdfData = bsdfData;
+        mtlData.V = V;
     }
 
-    return mtl;
+    return mtlData;
 }
 
-bool SampleMaterial(Material mtl, float3 inputSample, out float3 sampleDir, out MaterialResult result)
+bool SampleMaterial(MaterialData mtlData, float3 inputSample, out float3 sampleDir, out MaterialResult result)
 {
-    if (inputSample.z < mtl.specProb)
+    if (IsAbove(mtlData))
     {
-        if (!SampleGGX(mtl, inputSample, sampleDir, result.specValue, result.specPdf))
+        if (inputSample.z < mtlData.bsdfWeight[0]) // Diffuse BRDF
+        {
+            if (!BRDF::SampleDiffuse(mtlData, inputSample, sampleDir, result.diffValue, result.diffPdf))
+                return false;
+
+            BRDF::EvaluateGGX(mtlData, sampleDir, result.specValue, result.specPdf);
+
+            result.diffPdf *= mtlData.bsdfWeight[0];
+            result.specPdf *= mtlData.bsdfWeight[1];
+        }
+        else if (inputSample.z < mtlData.bsdfWeight[0] + mtlData.bsdfWeight[1]) // Specular BRDF
+        {
+            if (!BRDF::SampleGGX(mtlData, inputSample, sampleDir, result.specValue, result.specPdf))
+                return false;
+
+            BRDF::EvaluateDiffuse(mtlData, sampleDir, result.diffValue, result.diffPdf);
+
+            result.diffPdf *= mtlData.bsdfWeight[0];
+            result.specPdf *= mtlData.bsdfWeight[1];
+        }
+        else // Specular BTDF
+        {
+            if (!BTDF::SampleGGX(mtlData, inputSample, sampleDir, result.specValue, result.specPdf))
+                return false;
+
+            InitDiffuse(result);
+            result.specPdf *= mtlData.bsdfWeight[2];
+        }
+    }
+    else // Below
+    {
+        if (!BTDF::SampleDelta(mtlData, sampleDir, result.specValue, result.specPdf))
             return false;
 
-        EvaluateDiffuse(mtl, sampleDir, result.diffValue, result.diffPdf);
+        InitDiffuse(result);
     }
-    else
-    {
-        if (!SampleDiffuse(mtl, inputSample, sampleDir, result.diffValue, result.diffPdf))
-            return false;
-
-        EvaluateGGX(mtl, sampleDir, result.specValue, result.specPdf);
-    }
-
-    result.diffPdf *= mtl.diffProb;
-    result.specPdf *= mtl.specProb;
-
     return true;
 }
 
-void EvaluateMaterial(Material mtl, float3 sampleDir, out MaterialResult result)
+void EvaluateMaterial(MaterialData mtlData, float3 sampleDir, out MaterialResult result)
 {
-    EvaluateDiffuse(mtl, sampleDir, result.diffValue, result.diffPdf);
-    EvaluateGGX(mtl, sampleDir, result.specValue, result.specPdf);
-    result.diffPdf *= mtl.diffProb;
-    result.specPdf *= mtl.specProb;
+    if (IsAbove(mtlData))
+    {
+        BRDF::EvaluateDiffuse(mtlData, sampleDir, result.diffValue, result.diffPdf);
+        BRDF::EvaluateGGX(mtlData, sampleDir, result.specValue, result.specPdf);
+        result.diffPdf *= mtlData.bsdfWeight[0];
+        result.specPdf *= mtlData.bsdfWeight[1];
+    }
+    else // Below
+    {
+        Init(result);
+    }
 }
