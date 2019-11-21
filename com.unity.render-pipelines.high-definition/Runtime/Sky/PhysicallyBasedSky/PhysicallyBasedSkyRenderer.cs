@@ -94,9 +94,9 @@ namespace UnityEngine.Rendering.HighDefinition
             m_InScatteredRadianceTables[2] = AllocateInScatteredRadianceTable(2);
         }
 
-        public override void SetGlobalSkyData(CommandBuffer cmd, SkySettings sky, Vector3 cameraPositionWS)
+        public override void SetGlobalSkyData(CommandBuffer cmd, BuiltinSkyParameters builtinParams)
         {
-            UpdateGlobalConstantBuffer(cmd, sky, cameraPositionWS);
+            UpdateGlobalConstantBuffer(cmd, builtinParams);
 
             // TODO: ground irradiance table? Volume SH? Something else?
             if (m_LastPrecomputedBounce > 0)
@@ -146,15 +146,15 @@ namespace UnityEngine.Rendering.HighDefinition
         }
 
         // For both precomputation and runtime lighting passes.
-        void UpdateGlobalConstantBuffer(CommandBuffer cmd, SkySettings sky, Vector3 cameraPositionWS)
+        void UpdateGlobalConstantBuffer(CommandBuffer cmd, BuiltinSkyParameters builtinParams)
         {
-            var pbrSky = sky as PhysicallyBasedSky;
+            var pbrSky = builtinParams.skySettings as PhysicallyBasedSky;
 
             float R    = pbrSky.GetPlanetaryRadius();
             float D    = Mathf.Max(pbrSky.airMaximumAltitude.value, pbrSky.aerosolMaximumAltitude.value);
             float airH = pbrSky.GetAirScaleHeight();
             float aerH = pbrSky.GetAerosolScaleHeight();
-            float iMul = Mathf.Pow(2.0f, pbrSky.exposure.value) * pbrSky.multiplier.value;
+            float iMul = GetSkyIntensity(pbrSky, builtinParams.debugSettings);
 
             Vector2 expParams = ComputeExponentialInterpolationParams(pbrSky.horizonZenithShift.value);
 
@@ -184,7 +184,7 @@ namespace UnityEngine.Rendering.HighDefinition
             cmd.SetGlobalVector(HDShaderIDs._GroundAlbedo,              pbrSky.groundTint.value);
             cmd.SetGlobalFloat( HDShaderIDs._AlphaSaturation,           pbrSky.alphaSaturation.value);
 
-            cmd.SetGlobalVector(HDShaderIDs._PlanetCenterPosition,      pbrSky.GetPlanetCenterPosition(cameraPositionWS));
+            cmd.SetGlobalVector(HDShaderIDs._PlanetCenterPosition,      pbrSky.GetPlanetCenterPosition(builtinParams.worldSpaceCameraPos));
             cmd.SetGlobalFloat( HDShaderIDs._AlphaMultiplier,           pbrSky.alphaMultiplier.value);
 
             cmd.SetGlobalVector(HDShaderIDs._HorizonTint,               pbrSky.horizonTint.value);
@@ -280,7 +280,7 @@ namespace UnityEngine.Rendering.HighDefinition
 
         protected override bool Update(BuiltinSkyParameters builtinParams)
         {
-            UpdateGlobalConstantBuffer(builtinParams.commandBuffer, builtinParams.skySettings, builtinParams.worldSpaceCameraPos);
+            UpdateGlobalConstantBuffer(builtinParams.commandBuffer, builtinParams);
             var pbrSky = builtinParams.skySettings as PhysicallyBasedSky;
 
             int currPrecomputationParamHash = pbrSky.GetPrecomputationHashCode();

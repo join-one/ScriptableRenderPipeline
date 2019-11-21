@@ -18,6 +18,8 @@ namespace UnityEditor.Rendering.HighDefinition
         public SerializedProperty spotLightShape;
         public SerializedProperty shapeWidth;
         public SerializedProperty shapeHeight;
+        public SerializedProperty barnDoorAngle;
+        public SerializedProperty barnDoorLength;
         public SerializedProperty aspectRatio;
         public SerializedProperty shapeRadius;
         public SerializedProperty maxSmoothness;
@@ -30,6 +32,7 @@ namespace UnityEditor.Rendering.HighDefinition
         public SerializedProperty blockerSampleCount;
         public SerializedProperty filterSampleCount;
         public SerializedProperty minFilterSize;
+        public SerializedProperty scaleForSoftness;
         public SerializedProperty areaLightCookie;   // We can't use default light cookies because the cookie gets reset by some safety measure on C++ side... :/
         public SerializedProperty areaLightShadowCone;
         public SerializedProperty useCustomSpotLightShadowCone;
@@ -212,6 +215,8 @@ namespace UnityEditor.Rendering.HighDefinition
                 spotLightShape = o.Find("m_SpotLightShape");
                 shapeWidth = o.Find("m_ShapeWidth");
                 shapeHeight = o.Find("m_ShapeHeight");
+                barnDoorAngle = o.Find("m_BarnDoorAngle");
+                barnDoorLength = o.Find("m_BarnDoorLength");
                 aspectRatio = o.Find("m_AspectRatio");
                 shapeRadius = o.Find("m_ShapeRadius");
                 maxSmoothness = o.Find("m_MaxSmoothness");
@@ -220,6 +225,7 @@ namespace UnityEditor.Rendering.HighDefinition
                 blockerSampleCount = o.Find("m_BlockerSampleCount");
                 filterSampleCount = o.Find("m_FilterSampleCount");
                 minFilterSize = o.Find("m_MinFilterSize");
+                scaleForSoftness = o.Find("m_SoftnessScale");
                 areaLightCookie = o.Find("m_AreaLightCookie");
                 areaLightShadowCone = o.Find("m_AreaLightShadowCone");
                 useCustomSpotLightShadowCone = o.Find("m_UseCustomSpotLightShadowCone");
