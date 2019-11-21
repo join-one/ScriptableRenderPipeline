@@ -263,13 +263,9 @@ namespace UnityEngine.Rendering.Universal
             ExecuteBlock(RenderPassBlock.MainRenderingOpaque, blockRanges, context, ref renderingData);
 
             // Transparent blocks...
-            // Set the shadow settings before rendering transparent objects
-            CoreUtils.SetKeyword(cmd, ShaderKeywordStrings.MainLightShadows, renderingData.shadowData.shadowTransparentReceiveSupported);
-            context.ExecuteCommandBuffer(cmd);
-            cmd.Clear();
             ExecuteBlock(RenderPassBlock.MainRenderingTransparent, blockRanges, context, ref renderingData);
 
-
+            // Draw Gizmos...
             DrawGizmos(context, camera, GizmoSubset.PreImageEffects);
 
             // In this block after rendering drawing happens, e.g, post processing, video player capture.
